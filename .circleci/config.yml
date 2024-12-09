@@ -1,0 +1,55 @@
+version: 2.1
+jobs:
+  check_whitespace:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Check for trailing whitespace
+          command: ./dev-scripts/check-trailing-whitespace
+      - run:
+          name: Check that all text files end in a trailing newline
+          command: ./dev-scripts/check-trailing-newline
+  check_bash:
+    docker:
+      - image: koalaman/shellcheck-alpine:v0.9.0
+    steps:
+      - run:
+          name: Install dependencies needed to check out repo
+          command: apk add bash git openssh-client grep
+      - checkout
+      - run:
+          name: Run static analysis on bash scripts
+          command: ./dev-scripts/check-bash
+  test_go:
+    docker:
+      - image: cimg/go:1.19.1
+    resource_class: medium
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ./
+      - restore_cache:
+          keys:
+            - go-test-mod-v1-{{ checksum "go.sum" }}
+      - run:
+          name: Test go packages
+          command: dev-scripts/run-go-tests --full
+      - store_artifacts:
+          path: .coverage.html
+      - run:
+          name: Verify golang formatting
+          command: dev-scripts/check-go-formatting
+      - save_cache:
+          key: go-test-mod-v1-{{ checksum "go.sum" }}
+          paths:
+            - ~/go/pkg/mod
+workflows:
+  version: 2
+  test_deploy:
+    jobs:
+      - check_whitespace
+      - check_bash
+      - test_go
